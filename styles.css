@@ -1,0 +1,14 @@
+.modicon_exportanotas {
+    background-color: #ffffff !important;
+    border-radius: 5px !important;
+    border-color: black;
+    border-width: 1px;
+    border-style: solid;
+}
+
+.iconlarge {
+    background-color: #ffffff !important;
+    width: 50px !important;
+    height: 50px !important;
+}
+
