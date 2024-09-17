@@ -207,10 +207,26 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         }
 
         // Añadir el encabezado "Selección de campos"
-        $mform->addElement('header', 'seleccioncampos', get_string('seleccioncampos', 'mod_exportanotas'));
+        $mform->addElement('header', 'seleccionnotas', get_string('seleccionnotas', 'mod_exportanotas'));
 
-        $mform->addElement('text', 'test', get_string('test', 'mod_exportanotas'));
-        $mform->setType('test', PARAM_TEXT);
+        $sql_grades_items = "SELECT 
+                                gi.id, 
+                                gi.itemname 
+                            FROM 
+                                {grade_items} AS gi 
+                            WHERE 
+                                gi.courseid = :courseid AND 
+                                gi.itemname IS NOT NULL";
+
+        $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
+        
+        foreach ($grades_items as $gi) {
+            $mform->addElement('advcheckbox', $gi->id, $gi->itemname);
+            $mform->setDefault($gi->id, 0);
+        }
+
+        /* $mform->addElement('text', 'test', get_string('test', 'mod_exportanotas'));
+        $mform->setType('test', PARAM_TEXT); */
 
         $mform->addElement('header', 'others', get_string('others', 'mod_exportanotas'));
 

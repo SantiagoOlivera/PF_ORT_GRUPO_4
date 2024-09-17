@@ -116,8 +116,8 @@ $string['prefijos_grupos'] = 'Prefijos de Grupos';
 $string['prefijos_grupos_help'] = 'Ingrese los prefijos de grupos separados por comas. Estos prefijos se usarán para identificar y agrupar grupos en la exportación de notas.';
 $string['prefijos_grupos_help_help'] = 'Ingrese los prefijos de grupos separados por comas. Estos prefijos se usarán para identificar y agrupar grupos en la exportación de notas.';
 
-$string['seleccioncamposfieldset'] = 'Exportación de notas';
-$string['seleccioncampos'] = 'Selección de campos';
-$string['seleccioncampos'] = 'Selección de campos';
+$string['seleccionnotasfieldset'] = 'Selección de notas';
+$string['seleccionnotas'] = 'Selección de notas';
+$string['seleccionnotas'] = 'Selección de notas';
 
 ?>

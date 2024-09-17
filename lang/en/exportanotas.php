@@ -116,8 +116,9 @@
  $string['prefijos_grupos_help'] = 'Enter the group prefixes separated by commas. These prefixes will be used to identify and group groups in the grade export.';
  $string['prefijos_grupos_help_help'] = 'Enter the group prefixes separated by commas. These prefixes will be used to identify and group groups in the grade export.';
  
- $string['seleccioncamposfieldset'] = 'Select fields';
- $string['seleccioncampos'] = 'Select fields';
- $string['seleccioncampos'] = 'Select fields';
+ $string['seleccionnotasfieldset'] = 'Select grades items';
+ $string['seleccionnotas'] = 'Select grades items';
+ $string['seleccionnotas'] = 'Select grades items';
+ 
  ?>
  
