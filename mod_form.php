@@ -206,7 +206,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
             $mform->addHelpButton('debug', 'debug_help', 'mod_exportanotas');
         }
 
-        // Añadir el encabezado "Selección de campos"
+        // Añadir el encabezado "Selección de notas"
         $mform->addElement('header', 'seleccionnotas', get_string('seleccionnotas', 'mod_exportanotas'));
 
         $sql_grades_items = "SELECT 
