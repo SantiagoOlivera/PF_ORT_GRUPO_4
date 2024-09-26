@@ -119,5 +119,7 @@ $string['prefijos_grupos_help_help'] = 'Ingrese los prefijos de grupos separados
 $string['seleccionnotasfieldset'] = 'Selección de notas';
 $string['seleccionnotas'] = 'Selección de notas';
 $string['seleccionnotas'] = 'Selección de notas';
+$string['items_de_calificacion_no_configurados'] = 'Items de calificación no configurados para este curso';
+
 
 ?>

@@ -119,6 +119,7 @@
  $string['seleccionnotasfieldset'] = 'Select grades items';
  $string['seleccionnotas'] = 'Select grades items';
  $string['seleccionnotas'] = 'Select grades items';
+ $string['items_de_calificacion_no_configurados'] = 'Grade items are not defined for this course';
  
  ?>
  

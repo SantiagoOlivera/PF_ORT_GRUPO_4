@@ -219,14 +219,16 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                                 gi.itemname IS NOT NULL";
 
         $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
-        
-        foreach ($grades_items as $gi) {
-            $mform->addElement('advcheckbox', $gi->id, $gi->itemname);
-            $mform->setDefault($gi->id, 0);
-        }
 
-        /* $mform->addElement('text', 'test', get_string('test', 'mod_exportanotas'));
-        $mform->setType('test', PARAM_TEXT); */
+        $notas = array();
+        foreach($grades_items as $gi) {
+            $notas[] = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>'notas'), array(0, 1));
+        }
+        if(sizeof($grades_items) == 0){
+            $mensaje_grade_items_no_configuradas = get_string('items_de_calificacion_no_configurados', 'mod_exportanotas');
+            $mform->addElement('html', "<div class='p-5'><h6 class='text-center alert alert-primary'>{$mensaje_grade_items_no_configuradas}</h6></div>");
+        }
+        $mform->addGroup($notas, 'seleccion_de_notas', '', array('<br>'), true);
 
         $mform->addElement('header', 'others', get_string('others', 'mod_exportanotas'));
 
@@ -438,6 +440,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
             $config_data['courses'][$course_index]['course_short_name'] = html_entity_decode($course_short_name);
             $config_data['courses'][$course_index]['categoria_agrupadora'] = $data->categoria_agrupadora;
             $config_data['courses'][$course_index]['prefijos_grupos'] = $data->prefijos_grupos;
+            $config_data['courses'][$course_index]['seleccion_de_notas'] = $data->seleccion_de_notas;
         } else {
             $config_data['courses'][] = array(
                 'course_id' => $course_id,
@@ -445,7 +448,8 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                 'course_short_name' => html_entity_decode($course_short_name),
                 'categoria_agrupadora' => $data->categoria_agrupadora,
                 'prefijos_grupos' => $data->prefijos_grupos,
-                'execution_parameters' => $execution_parameters
+                'seleccion_de_notas' => $data->seleccion_de_notas,
+                'execution_parameters' => $execution_parameters,
             );
         }
 
@@ -467,7 +471,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
 
         $context = context_system::instance();
         $fs = get_file_storage();
-
+        $existe_configuracion_curso = false;
         // Precargar los valores guardados previamente
         $config_path = $CFG->dataroot . '/exportanotas_configurations.json';
         if (file_exists($config_path)) {
@@ -481,6 +485,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                 if (isset($config_data['courses'])) {
                     foreach ($config_data['courses'] as $course) {
                         if ($course['course_id'] == $course_id) {
+                            $existe_configuracion_curso = true;
                             $default_values['minute'] = $course['execution_parameters']['minute'];
                             $default_values['hour'] = $course['execution_parameters']['hour'];
                             $default_values['day'] = $course['execution_parameters']['day'];
@@ -502,10 +507,37 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                             } else {
                                 $default_values['prefijos_grupos'] = '';
                             }
+
+                            //Setear valores guardados en la configuracion de las notas seleccionadas
+                            if(isset($course['seleccion_de_notas'])) {
+                                //Si ya esta definidas las notas seteamos los valores cofigurados
+                                foreach($course['seleccion_de_notas'] as $key => $val) {
+                                    $default_values['seleccion_de_notas'][$key] = $val;
+                                }
+                            }
                             break;
                         }
                     }
                 }
+            }
+        }
+
+        if(!$existe_configuracion_curso){
+            $course_id = $this->current->course;
+            // Defaults seleccion de notas
+            $sql_grades_items = "SELECT 
+                                    gi.id, 
+                                    gi.itemname 
+                                FROM 
+                                    {grade_items} AS gi 
+                                WHERE 
+                                    gi.courseid = :courseid AND 
+                                    gi.itemname IS NOT NULL";
+            $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
+            //Por defecto todas las notas seleccionadas
+            $default_values['seleccion_de_notas'] = array();
+            foreach($grades_items as $gi){
+                $default_values['seleccion_de_notas']["grade_item_{$gi->id}"] = '1';
             }
         }
 
