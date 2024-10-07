@@ -29,6 +29,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
             if ($debug) {
                 mtrace($message);
             }
+            //echo "{$message} \n ";
         };
 
         $imprimir_inicio = function () use ($trace) {
@@ -39,6 +40,43 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
         $imprimir_fin = function () use ($trace) {
             $trace("Exportación de notas finalizada...");
             $trace("----------------------------------------------------------------------------------------------------------");
+        };
+
+        $get_seleccion_de_notas_course = function($course_id) use ($config_data){
+            $ret = null;
+            if(isset($course_id) && isset($config_data->courses)){
+                $courses = $config_data->courses;
+                foreach($courses as $c){
+                    if($course_id == $c->course_id) {
+                        if(isset($c->seleccion_de_notas)){
+                            $ret = $c->seleccion_de_notas;
+                        }
+                        break;
+                    }
+                }
+            }
+            return $ret;
+        };
+
+        $get_sql_where_seleccion_de_notas = function($seleccion_de_notas) {
+            //Convertir a un array el objeto
+            $array_seleccion_de_notas = get_object_vars($seleccion_de_notas);
+            $sql_where_notas = '';
+            if(sizeof($array_seleccion_de_notas) > 0) {
+                $sql_notas = '';
+                foreach( $array_seleccion_de_notas as $k => $val ) {
+                    if($val == '1') {
+                        $sql_notas .= str_replace('grade_item_', '', $k) . ",";
+                    }
+                }
+                if(!empty($sql_notas)){
+                    $sql_notas = substr($sql_notas, 0, -1);
+                    echo $sql_notas;
+                    $sql_where_notas = " AND gi.id IN ( {$sql_notas} ) ";
+                }
+                echo $sql_where_notas;
+            }
+            return $sql_where_notas;
         };
 
         $imprimir_inicio();
@@ -74,7 +112,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
         };
 
         // Obtener calificaciones de un curso
-        $obtener_calificaciones = function($course_id, $prefijos_grupos) use ($DB, $trace, $CFG) {
+        $obtener_calificaciones = function($course_id, $prefijos_grupos) use ($DB, $trace, $CFG, $get_seleccion_de_notas_course, $get_sql_where_seleccion_de_notas) {
             $trace("Obteniendo calificaciones del curso ID: $course_id...");
 
             // Obtener los campos personalizados
@@ -136,30 +174,36 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                 $trace("No se encontraron registros de calificaciones para el curso ID: $course_id.");
             }
 
+            //Obtener las notas seleccionadas en el curso
+            $seleccion_de_notas = $get_seleccion_de_notas_course($course_id);
+            $sql_where_notas = $get_sql_where_seleccion_de_notas($seleccion_de_notas);
+
             // Obtener los nombres de las actividades calificables excluyendo asistencia
             $sql_activities = "SELECT
-                           gi.id AS gradeitemid,
-                           gi.itemname,
-                           gi.grademax,
-                           gi.gradepass,
-                           gi.sortorder,
-                           cs.section,
-                           FIND_IN_SET(cm.id, cs.sequence) AS position,
-                           cm.id AS cmid
-                       FROM
-                           {course_sections} cs
-                       JOIN
-                           {course_modules} cm ON FIND_IN_SET(cm.id, cs.sequence) > 0
-                       JOIN
-                           {modules} m ON cm.module = m.id
-                       JOIN
-                           {grade_items} gi ON gi.iteminstance = cm.instance AND gi.itemmodule = m.name
-                       WHERE
-                           cs.course = :courseid
-                           AND gi.itemtype = 'mod'
-                           AND gi.itemmodule != 'attendance'
-                       ORDER BY
-                           cs.section, position";
+                        gi.id AS gradeitemid,
+                        gi.itemname,
+                        gi.grademax,
+                        gi.gradepass,
+                        gi.sortorder,
+                        cs.section,
+                        FIND_IN_SET(cm.id, cs.sequence) AS position,
+                        cm.id AS cmid
+                    FROM
+                        {course_sections} cs
+                    JOIN
+                        {course_modules} cm ON FIND_IN_SET(cm.id, cs.sequence) > 0
+                    JOIN
+                        {modules} m ON cm.module = m.id
+                    JOIN
+                        {grade_items} gi ON gi.iteminstance = cm.instance AND gi.itemmodule = m.name
+                    WHERE
+                        cs.course = :courseid
+                        /* AND gi.itemtype = 'mod' */
+                        AND gi.itemmodule != 'attendance'
+                        {$sql_where_notas}
+                    ORDER BY
+                        cs.section, position";
+                    
 
             $activities = $DB->get_records_sql($sql_activities, ['courseid' => $course_id]);
             if (!$activities) {
@@ -170,8 +214,8 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
 
             // Obtener los nombres de los grupos del curso actual
             $sql_groups = "SELECT g.id, g.name, g.idnumber
-               FROM {groups} g
-               WHERE g.courseid = :courseid";
+            FROM {groups} g
+            WHERE g.courseid = :courseid";
             $groups = $DB->get_records_sql($sql_groups, ['courseid' => $course_id ]);
 
             // Generar los nombres de las columnas para evaluables

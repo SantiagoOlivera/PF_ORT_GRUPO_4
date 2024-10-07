@@ -209,16 +209,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         // Añadir el encabezado "Selección de notas"
         $mform->addElement('header', 'seleccionnotas', get_string('seleccionnotas', 'mod_exportanotas'));
 
-        $sql_grades_items = "SELECT 
-                                gi.id, 
-                                gi.itemname 
-                            FROM 
-                                {grade_items} AS gi 
-                            WHERE 
-                                gi.courseid = :courseid AND 
-                                gi.itemname IS NOT NULL";
-
-        $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
+        $grades_items = $this->get_grade_items_course($course_id);
 
         $notas = array();
         foreach($grades_items as $gi) {
@@ -525,15 +516,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         if(!$existe_configuracion_curso){
             $course_id = $this->current->course;
             // Defaults seleccion de notas
-            $sql_grades_items = "SELECT 
-                                    gi.id, 
-                                    gi.itemname 
-                                FROM 
-                                    {grade_items} AS gi 
-                                WHERE 
-                                    gi.courseid = :courseid AND 
-                                    gi.itemname IS NOT NULL";
-            $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
+            $grades_items = $this->get_grade_items_course($course_id);
             //Por defecto todas las notas seleccionadas
             $default_values['seleccion_de_notas'] = array();
             foreach($grades_items as $gi){
@@ -573,4 +556,21 @@ class mod_exportanotas_mod_form extends moodleform_mod {
 
         return $errors;
     }
+
+    public function get_grade_items_course($course_id) {
+        global $USER, $DB;
+        $sql_grades_items = "SELECT 
+                                gi.id, 
+                                gi.itemname 
+                            FROM 
+                                {grade_items} AS gi 
+                            WHERE 
+                                gi.courseid = :courseid AND 
+                                gi.itemname IS NOT NULL AND 
+                                gi.itemname <> '' ";
+
+        $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
+        return $grades_items;
+    }
+
 }
