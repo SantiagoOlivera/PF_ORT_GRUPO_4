@@ -62,19 +62,20 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
             //Convertir a un array el objeto
             $array_seleccion_de_notas = get_object_vars($seleccion_de_notas);
             $sql_where_notas = '';
+            $sql_notas = '';
             if(sizeof($array_seleccion_de_notas) > 0) {
-                $sql_notas = '';
                 foreach( $array_seleccion_de_notas as $k => $val ) {
                     if($val == '1') {
                         $sql_notas .= str_replace('grade_item_', '', $k) . ",";
                     }
                 }
-                if(!empty($sql_notas)){
-                    $sql_notas = substr($sql_notas, 0, -1);
-                    echo $sql_notas;
-                    $sql_where_notas = " AND gi.id IN ( {$sql_notas} ) ";
-                }
-                echo $sql_where_notas;
+            }
+            if(!empty($sql_notas)){
+                $sql_notas = substr($sql_notas, 0, -1);
+                $sql_where_notas = " AND gi.id IN ( {$sql_notas} ) ";
+            } else {
+                //Para cuando no hay notas configuradas
+                $sql_where_notas = " AND gi.id IS NULL ";
             }
             return $sql_where_notas;
         };
@@ -193,9 +194,11 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                     JOIN
                         {course_modules} cm ON FIND_IN_SET(cm.id, cs.sequence) > 0
                     JOIN
-                        {modules} m ON cm.module = m.id
+                        /* {modules} m ON cm.module = m.id */
+                        {modules} m ON cm.module = m.id AND m.name = 'exportanotas'
                     JOIN
-                        {grade_items} gi ON gi.iteminstance = cm.instance AND gi.itemmodule = m.name
+                        /* {grade_items} gi ON gi.iteminstance = cm.instance AND gi.itemmodule = m.name */
+                        {grade_items} gi ON gi.courseid = cs.course
                     WHERE
                         cs.course = :courseid
                         /* AND gi.itemtype = 'mod' */
@@ -203,7 +206,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                         {$sql_where_notas}
                     ORDER BY
                         cs.section, position";
-                    
+            
 
             $activities = $DB->get_records_sql($sql_activities, ['courseid' => $course_id]);
             if (!$activities) {
