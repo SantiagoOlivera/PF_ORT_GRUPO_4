@@ -26,6 +26,11 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot.'/course/moodleform_mod.php');
 
+require_once($CFG->libdir . '/gradelib.php');
+require_once($CFG->dirroot . '/grade/lib.php');
+
+use mod_exportanotas\task\exportar_calificaciones_task;
+
 /**
  * Module instance settings form.
  *
@@ -210,15 +215,38 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         $mform->addElement('header', 'seleccionnotas', get_string('seleccionnotas', 'mod_exportanotas'));
 
         $grades_items = $this->get_grade_items_course($course_id);
+        $not_averageable_grade_items = [];
+        foreach($grades_items as $gi) {
+            if(!$gi->is_averageable){
+                array_push($not_averageable_grade_items, $gi);
+            }
+        }
 
         $notas = array();
+
         foreach($grades_items as $gi) {
-            $notas[] = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>'notas'), array(0, 1));
+            if($gi->is_averageable) {
+                $n = array();
+                $chk = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>"notas"), array(0, 1) );
+                $notas[] = $chk;
+                foreach($not_averageable_grade_items as $nagi) {
+                    $subchk = $mform->createElement('advcheckbox', "grade_item_{$nagi->id}", $nagi->itemname, null, array('name' => "grade_item_{$nagi->id}" ,'group'=> "average_config_grade_item_{$gi->id}" ), array(0, 1));
+                    $n[] = $subchk;
+                }
+                $subgroup = $mform->createElement('group', "average_config_grade_item_{$gi->id}" , "Indicar los items de calificación que promedian {$gi->itemname}", $n, array('<br>'), true); 
+                $subgroup->setAttributes(['class' => 'pl-4' ]);
+                $notas[] = $subgroup;
+            } else {
+                //Items de calificacion configurados en el curso
+                $notas[] = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>'notas'), array(0, 1)); 
+            }
         }
+
         if(sizeof($grades_items) == 0){
             $mensaje_grade_items_no_configuradas = get_string('items_de_calificacion_no_configurados', 'mod_exportanotas');
             $mform->addElement('html', "<div class='p-5'><h6 class='text-center alert alert-primary'>{$mensaje_grade_items_no_configuradas}</h6></div>");
         }
+
         $mform->addGroup($notas, 'seleccion_de_notas', '', array('<br>'), true);
 
         $mform->addElement('header', 'others', get_string('others', 'mod_exportanotas'));
@@ -424,6 +452,9 @@ class mod_exportanotas_mod_form extends moodleform_mod {
             $data->prefijos_grupos = '';
         }
 
+        //Guardamos los items de calificacion defualt o fijos si no estan configurados en el curso
+        $seleccion_de_notas = $this->save_unset_grade_items($data->seleccion_de_notas);
+
         // Si el curso ya existe, actualizarlo, si no, añadirlo
         if ($course_index !== null) {
             $config_data['courses'][$course_index]['execution_parameters'] = $execution_parameters;
@@ -431,7 +462,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
             $config_data['courses'][$course_index]['course_short_name'] = html_entity_decode($course_short_name);
             $config_data['courses'][$course_index]['categoria_agrupadora'] = $data->categoria_agrupadora;
             $config_data['courses'][$course_index]['prefijos_grupos'] = $data->prefijos_grupos;
-            $config_data['courses'][$course_index]['seleccion_de_notas'] = $data->seleccion_de_notas;
+            $config_data['courses'][$course_index]['seleccion_de_notas'] = $seleccion_de_notas;
         } else {
             $config_data['courses'][] = array(
                 'course_id' => $course_id,
@@ -439,7 +470,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                 'course_short_name' => html_entity_decode($course_short_name),
                 'categoria_agrupadora' => $data->categoria_agrupadora,
                 'prefijos_grupos' => $data->prefijos_grupos,
-                'seleccion_de_notas' => $data->seleccion_de_notas,
+                'seleccion_de_notas' => $seleccion_de_notas,
                 'execution_parameters' => $execution_parameters,
             );
         }
@@ -519,7 +550,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
             $grades_items = $this->get_grade_items_course($course_id);
             //Por defecto todas las notas seleccionadas
             $default_values['seleccion_de_notas'] = array();
-            foreach($grades_items as $gi){
+            foreach($grades_items as $gi) {
                 $default_values['seleccion_de_notas']["grade_item_{$gi->id}"] = '1';
             }
         }
@@ -557,11 +588,32 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         return $errors;
     }
 
+    public function save_unset_grade_items($seleccion_de_notas) {
+        //Guarda los items de calificacion si no estan configurados
+        foreach($seleccion_de_notas as $k => $val){
+            $id = str_replace('grade_item_', '', $k);
+            if(!is_numeric($id) && $id != "NFC") {
+                $grade_item = $this->save_default_grade_item_in_course($id);
+                if($grade_item) {
+                    $seleccion_de_notas["grade_item_{$grade_item->id}"] = $val;
+                    unset($seleccion_de_notas[$k]);
+                }
+            }
+        }
+        return $seleccion_de_notas;
+    }
+
     public function get_grade_items_course($course_id) {
         global $USER, $DB;
+        $default_grade_items = exportar_calificaciones_task::get_default_grade_items();
         $sql_grades_items = "SELECT 
-                                gi.id, 
-                                gi.itemname 
+                                gi.id AS id, 
+                                gi.itemname AS itemname,
+                                true AS is_set,
+                                ( SELECT CASE gi.itemmodule 
+                                    WHEN 'exportanotas' THEN true
+                                    ELSE false
+                                END ) AS is_fixed 
                             FROM 
                                 {grade_items} AS gi 
                             WHERE 
@@ -570,7 +622,99 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                                 gi.itemname <> '' ";
 
         $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
+
+        //Agrego items de calificacion por defecto si no existen en la configuracion del cur
+        foreach($default_grade_items as $dgi) {
+            $ret = array_filter($grades_items, function($gi) use ($dgi) {
+                return $dgi->itemname == $gi->itemname;
+            });
+            $item = reset($ret);           
+            if(!$item){
+                array_push($grades_items, $dgi);    
+            }
+        }
+
         return $grades_items;
     }
+
+
+
+    public function get_grade_items_course_without_default_grade_items($course_id) {
+        global $USER, $DB;
+
+        $sql_grades_items = "SELECT 
+                                gi.id AS id, 
+                                gi.itemname AS itemname
+                            FROM 
+                                {grade_items} AS gi 
+                            WHERE 
+                                gi.courseid = :courseid AND 
+                                gi.itemname IS NOT NULL AND 
+                                gi.itemname <> '' AND
+                                gi.itemmodule <> 'exportanotas' ";
+
+        $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
+
+        return $grades_items;
+    }
+
+
+    public function save_default_grade_item_in_course($item_id) {
+        //Graba item fijo indicado por el parametro del id
+        $ret = null;
+        $default_grade_items = exportar_calificaciones_task::get_default_grade_items();
+
+        $found_item = array_filter($default_grade_items, function($item) use ($item_id) {
+            return $item->id === $item_id;
+        });
+
+        if (!empty($found_item)) {
+            $item = reset($found_item);
+            $ret = $this->save_grade_item( $item );
+        }
+
+        return $ret;
+
+    }
+
+    public function save_grade_item( $item ) {
+        //Graba nuevo item de califiacion si no existe para el curso actual
+        global $USER, $DB;
+        $course_id = $this->current->course;
+        $gi = null;
+
+        $sql_grades_items = "SELECT 
+                                gi.id AS id, 
+                                gi.itemname AS itemname
+                            FROM 
+                                {grade_items} AS gi 
+                            WHERE 
+                                gi.courseid = :courseid AND 
+                                gi.itemname = :itemname ";
+
+        $grade_item = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id, 'itemname' => "'{$item->itemname}'"]);
+
+        if(sizeof($grade_item) == 0) {
+
+            $grade_data = new stdClass();
+            $grade_data->courseid = $course_id;
+            $grade_data->itemname = $item->itemname;
+            $grade_data->itemtype = $item->itemtype;
+            $grade_data->itemmodule = $item->itemmodule;
+            $grade_data->gradetype = $item->gradetype;
+            $grade_data->grademax = $item->grademax;
+            $grade_data->grademin = $item->grademin;
+            $grade_data->gradepass = $item->gradepass;
+
+            $gi = new grade_item($grade_data);
+            $is_saved = $gi->insert();
+            if($is_saved){
+                $gi = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id, 'itemname' => "'{$item->itemname}'"]);
+            }
+        }
+
+        return $gi;
+    }
+    
 
 }

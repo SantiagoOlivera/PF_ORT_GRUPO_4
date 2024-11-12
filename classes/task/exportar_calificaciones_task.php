@@ -4,6 +4,7 @@ namespace mod_exportanotas\task;
 defined('MOODLE_INTERNAL') || die();
 
 class exportar_calificaciones_task extends \core\task\scheduled_task {
+    
     public function get_name() {
         return get_string('exportar_calificaciones_task', 'mod_exportanotas');
     }
@@ -42,44 +43,6 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
             $trace("----------------------------------------------------------------------------------------------------------");
         };
 
-        $get_seleccion_de_notas_course = function($course_id) use ($config_data){
-            $ret = null;
-            if(isset($course_id) && isset($config_data->courses)){
-                $courses = $config_data->courses;
-                foreach($courses as $c){
-                    if($course_id == $c->course_id) {
-                        if(isset($c->seleccion_de_notas)){
-                            $ret = $c->seleccion_de_notas;
-                        }
-                        break;
-                    }
-                }
-            }
-            return $ret;
-        };
-
-        $get_sql_where_seleccion_de_notas = function($seleccion_de_notas) {
-            //Convertir a un array el objeto
-            $array_seleccion_de_notas = get_object_vars($seleccion_de_notas);
-            $sql_where_notas = '';
-            $sql_notas = '';
-            if(sizeof($array_seleccion_de_notas) > 0) {
-                foreach( $array_seleccion_de_notas as $k => $val ) {
-                    if($val == '1') {
-                        $sql_notas .= str_replace('grade_item_', '', $k) . ",";
-                    }
-                }
-            }
-            if(!empty($sql_notas)){
-                $sql_notas = substr($sql_notas, 0, -1);
-                $sql_where_notas = " AND gi.id IN ( {$sql_notas} ) ";
-            } else {
-                //Para cuando no hay notas configuradas
-                $sql_where_notas = " AND gi.id IS NULL ";
-            }
-            return $sql_where_notas;
-        };
-
         $imprimir_inicio();
 
         // Obtener los cursos a procesar
@@ -113,7 +76,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
         };
 
         // Obtener calificaciones de un curso
-        $obtener_calificaciones = function($course_id, $prefijos_grupos) use ($DB, $trace, $CFG, $get_seleccion_de_notas_course, $get_sql_where_seleccion_de_notas) {
+        $obtener_calificaciones = function($course_id, $prefijos_grupos) use ($DB, $trace, $CFG) {
             $trace("Obteniendo calificaciones del curso ID: $course_id...");
 
             // Obtener los campos personalizados
@@ -176,8 +139,8 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
             }
 
             //Obtener las notas seleccionadas en el curso
-            $seleccion_de_notas = $get_seleccion_de_notas_course($course_id);
-            $sql_where_notas = $get_sql_where_seleccion_de_notas($seleccion_de_notas);
+            $seleccion_de_notas = exportar_calificaciones_task::get_seleccion_de_notas_course($course_id);
+            $sql_items = exportar_calificaciones_task::get_sql_where_seleccion_de_notas($seleccion_de_notas);
 
             // Obtener los nombres de las actividades calificables excluyendo asistencia
             $sql_activities = "SELECT
@@ -188,7 +151,8 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                         gi.sortorder,
                         cs.section,
                         FIND_IN_SET(cm.id, cs.sequence) AS position,
-                        cm.id AS cmid
+                        cm.id AS cmid,
+                        false AS is_fixed
                     FROM
                         {course_sections} cs
                     JOIN
@@ -202,18 +166,26 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                     WHERE
                         cs.course = :courseid
                         /* AND gi.itemtype = 'mod' */
-                        AND gi.itemmodule != 'attendance'
-                        {$sql_where_notas}
+                        AND gi.itemmodule != 'attendance' 
+                        AND {$sql_items}
                     ORDER BY
                         cs.section, position";
-            
 
-            $activities = $DB->get_records_sql($sql_activities, ['courseid' => $course_id]);
+            $activities = $DB->get_records_sql($sql_activities, ['courseid' => $course_id ]);
+
+            $fixed_grade_items = exportar_calificaciones_task::get_fixed_grade_items_to_export($course_id);
+
+            //Agregamos los items de calificacion fijos o por defecto que se calculan a partir de otros items de calificación
+            if(sizeof($fixed_grade_items) > 0){
+                foreach($fixed_grade_items as $fgi){
+                    array_push($activities, $fgi);
+                }
+            }
+
             if (!$activities) {
                 $trace("No se encontraron actividades calificables para el curso ID: $course_id.");
                 return false;
             }
-
 
             // Obtener los nombres de los grupos del curso actual
             $sql_groups = "SELECT g.id, g.name, g.idnumber
@@ -311,13 +283,34 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
 
                 // Añadir las notas de las actividades calificables
                 foreach ($activities as $activity) {
-                    $sql_grade = "SELECT finalgrade, aggregationstatus
-                                FROM {grade_grades}
-                                WHERE itemid = :itemid
-                                AND userid = :userid";
+                    $sql_grade = '';
+                    $grade = null;
+                    if(!$activity->is_fixed) {
+                        $sql_grade = "SELECT 
+                                        finalgrade, 
+                                        aggregationstatus
+                                    FROM 
+                                        {grade_grades}
+                                    WHERE 
+                                        itemid = :itemid AND 
+                                        userid = :userid";
 
-                    $grade = $DB->get_record_sql($sql_grade, ['itemid' => $activity->gradeitemid, 'userid' => $user_data->userid]);
+                        $grade = $DB->get_record_sql($sql_grade, ['itemid' => $activity->gradeitemid, 'userid' => $user_data->userid]);
 
+                    } else {
+                        $sql_where_items = exportar_calificaciones_task::get_sql_grade_items_for_avg_fixed_grade_item($course_id, $activity->gradeitemid);
+                        $sql_grade = "SELECT 
+                                        AVG(finalgrade) AS finalgrade, 
+                                        'used' AS aggregationstatus
+                                    FROM 
+                                        {grade_grades}
+                                    WHERE 
+                                        itemid IN {$sql_where_items} AND 
+                                        userid = :userid";
+                                        
+                        $grade = $DB->get_record_sql($sql_grade, ['userid' => $user_data->userid]);
+                    }
+                    
                     if ($grade) {
                         if (in_array($grade->aggregationstatus, ['unknown', 'dropped', 'novalue']) || $grade->finalgrade === null) {
                             $grade_value = 'Ausente';
@@ -847,6 +840,257 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
 
         $imprimir_fin();
     }
+
+
+
+
+    public static function get_configuration_json() {
+        global $DB, $CFG;
+        $ret = null;
+        $config_path = $CFG->dataroot . '/exportanotas_configurations.json';
+        if (file_exists($config_path)) {
+            $ret = json_decode(file_get_contents($config_path));
+        } 
+        return $ret;
+    }
+
+    public static function get_seleccion_de_notas_course($course_id) {
+        $ret = null;
+        $config_data = exportar_calificaciones_task::get_configuration_json();
+        if($config_data){
+            if(isset($course_id) && isset($config_data->courses)){
+                $courses = $config_data->courses;
+                foreach($courses as $c){
+                    if($course_id == $c->course_id) {
+                        if(isset($c->seleccion_de_notas)){
+                            $ret = $c->seleccion_de_notas;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        return $ret;
+    }
+
+    public static function get_fixed_grade_items_to_export($course_id) {
+        $ret = array();
+        $fixed = exportar_calificaciones_task::get_default_grade_items();
+        $items = exportar_calificaciones_task::get_seleccion_de_notas_course($course_id);
+        //Convertir a un array el objeto
+        $array_seleccion_de_notas = get_object_vars($items);
+        if(sizeof($array_seleccion_de_notas) > 0) {
+            foreach($fixed as $f) {
+                foreach( $array_seleccion_de_notas as $k1 => $val1 ) {
+                    $id = str_replace('grade_item_', '', $k1);
+                    if($val1 == '1' && $id == $f->id) {
+                        array_push($ret, $f);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return $ret;
+    }
+    
+    public static function get_default_grade_items() {
+        //is_set => indica si esta configurada la nota en los items de calificaciones
+        //is_fixed => indica que este item de calificacion es un item de calificacion default(fijo) (que todos los cursos van a tener este item de calificación)
+        $ret[] = (object) array(
+            'id' => 'FJU', 
+            'gradeitemid' => 'FJU', 
+            'itemname' => 'FJU: Final Julio', 
+            'grademax' => 10,
+            'gradepass' => 4,
+            'sortorder' => null,
+            'section' => null,
+            'position' => null,
+            'cmid' => null,
+            'is_fixed' => true,
+            'is_set' => false, 
+            'is_fixed' => true,
+            'is_averageable' => false,
+            'courseid' => null,
+            'itemmodule' => 'exportanotas',
+            'itemtype' => 'manual',
+            'gradetype' => 1,
+            'grademin' => 1,
+        );
+        $ret[] = (object) array(
+            'id' => 'FD1', 
+            'gradeitemid' => 'FD1', 
+            'itemname' => 'FD1: Final Diciembre - Primer Llamado',
+            'grademax' => 10,
+            'gradepass' => 4,
+            'sortorder' => null,
+            'section' => null,
+            'position' => null,
+            'cmid' => null,
+            'is_fixed' => true,
+            'is_set' => false,  
+            'is_fixed' => true,
+            'is_averageable' => false,
+            'courseid' => null,
+            'itemmodule' => 'exportanotas',
+            'itemtype' => 'manual',
+            'gradetype' => 1,
+            'grademin' => 1,
+        );
+        $ret[] = (object) array(
+            'id' => 'FD2', 
+            'gradeitemid' => 'FD2', 
+            'itemname' => 'FD2: Final Diciembre - Segundo Llamado',
+            'grademax' => 10,
+            'gradepass' => 4,
+            'sortorder' => null,
+            'section' => null,
+            'position' => null,
+            'cmid' => null,
+            'is_fixed' => true,
+            'is_set' => false, 
+            'is_fixed' => true,
+            'is_averageable' => false,
+            'courseid' => null,
+            'itemmodule' => 'exportanotas',
+            'itemtype' => 'manual',
+            'gradetype' => 1,
+            'grademin' => 1,
+        );
+        $ret[] = (object) array(
+            'id' => 'FF1', 
+            'gradeitemid' => 'FF1', 
+            'itemname' => 'FF1: Final Febrero - Primer Llamado', 
+            'grademax' => 10,
+            'gradepass' => 4,
+            'sortorder' => null,
+            'section' => null,
+            'position' => null,
+            'cmid' => null,
+            'is_fixed' => true,
+            'is_set' => false, 
+            'is_fixed' => true,
+            'is_averageable' => false,
+            'courseid' => null,
+           'itemmodule' => 'exportanotas',
+           'itemtype' => 'manual',
+           'gradetype' => 1,
+            'grademin' => 1,
+        );
+        $ret[] = (object) array(
+            'id' => 'FF2', 
+            'gradeitemid' => 'FF2', 
+            'itemname' => 'FF2: Final Febrero - Segundo Llamado', 
+            'grademax' => 10,
+            'gradepass' => 4,
+            'sortorder' => null,
+            'section' => null,
+            'position' => null,
+            'cmid' => null,
+            'is_fixed' => true,
+            'is_set' => false, 
+            'is_fixed' => true,
+            'is_averageable' => false,
+            'courseid' => null,
+            'itemmodule' => 'exportanotas',
+            'itemtype' => 'manual',
+            'gradetype' => 1,
+            'grademin' => 1,
+        ); 
+        $ret[] = (object) array(
+            'id' => 'NFC',
+            'gradeitemid' => 'NFC',
+            'itemname' => 'NFC: Nota Final de Cursada',
+            'grademax' => 10,
+            'gradepass' => 4,
+            'sortorder' => null,
+            'section' => null,
+            'position' => null,
+            'cmid' => null,
+            'is_fixed' => true,
+            'is_set' => false, 
+            'is_fixed' => true,
+            'is_averageable' => true,
+            'courseid' => null,
+            'itemmodule' => 'exportanotas',
+            'itemtype' => 'manual',
+            'gradetype' => 1,
+            'grademin' => 1,
+        );
+
+        return $ret;
+    }
+
+    public static function get_sql_notas_seleccionadas($seleccion_de_notas) {
+        $sql_notas = '';
+        $ret = '';
+        //Convertir a un array el objeto
+        $array_seleccion_de_notas = get_object_vars($seleccion_de_notas);
+        if(sizeof($array_seleccion_de_notas) > 0) {
+            foreach( $array_seleccion_de_notas as $k => $val ) {
+                if($val == '1') {
+                    $id = str_replace('grade_item_', '', $k);
+                    if(is_numeric($id)) {
+                        $sql_notas .= $id . ",";
+                    }
+                }
+            }
+        }
+
+        $ret = substr($sql_notas, 0, -1);
+
+        return $ret;
+    }
+
+    public static function get_sql_where_seleccion_de_notas($seleccion_de_notas) {
+            
+        $sql_where_notas = '';
+        
+        $sql_notas = exportar_calificaciones_task::get_sql_notas_seleccionadas($seleccion_de_notas);
+
+        if(!empty($sql_notas)) {
+            $sql_where_notas = " gi.id IN ( {$sql_notas} ) ";
+        } else {
+            //Para cuando no hay notas configuradas
+            $sql_where_notas = " gi.id IS NULL ";
+        }
+
+        return $sql_where_notas;
+
+    }
+
+
+    public static function get_sql_grade_items_for_avg_fixed_grade_item( $course_id, $fixed_grade_item_id ) {
+
+        $ret = '';
+
+        $seleccion_de_notas = exportar_calificaciones_task::get_seleccion_de_notas_course($course_id);
+
+        $config = null;
+        $sql_notas = '';
+
+        //Convertir a un array el objeto
+        $array_seleccion_de_notas = get_object_vars($seleccion_de_notas);
+        if(sizeof($array_seleccion_de_notas) > 0) {
+            foreach( $array_seleccion_de_notas as $k => $val ) {
+                if($k == "average_config_grade_item_$fixed_grade_item_id") {
+                    $config = $val;
+                    break;
+                }
+            }
+        }
+        if(isset($config)) {
+            $items = exportar_calificaciones_task::get_sql_notas_seleccionadas($config);
+            if(!empty($items)){
+                $ret = "( {$items} )";
+            } else {
+                $ret = "( NULL )";
+            }
+        }
+
+        return $ret;
+    }
+
 }
 
 ?>
