@@ -551,7 +551,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
             //Por defecto todas las notas seleccionadas
             $default_values['seleccion_de_notas'] = array();
             foreach($grades_items as $gi) {
-                $default_values['seleccion_de_notas']["grade_item_{$gi->id}"] = '1';
+                $default_values['seleccion_de_notas']["grade_item_{$gi->id}"] = '0';
             }
         }
 
