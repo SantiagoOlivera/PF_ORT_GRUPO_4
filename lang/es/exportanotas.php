@@ -25,7 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['pluginname'] = 'Ort Exporta Notas';
+$string['pluginname'] = 'Ort Exporta Notas 2';
 $string['modulename'] = 'Exporta Notas';
 $string['modulenameplural'] = 'Exporta Notas';
 $string['exportanotasname_help_help'] = 'Introduce el nombre para la exportación de notas.';
