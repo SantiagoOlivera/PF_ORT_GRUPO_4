@@ -227,29 +227,77 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         foreach($grades_items as $gi) {
             if($gi->is_averageable) {
                 $n = array();
-                $chk = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>"notas"), array(0, 1) );
+                
+                // Checkbox principal para el ítem promediable
+                $chk = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>"notas", 'class' => "checkboxPrincipalNFC"), array(0, 1));
+
                 $notas[] = $chk;
+        
+                // Sub-checkboxes para los ítems no promediables relacionados
                 foreach($not_averageable_grade_items as $nagi) {
                     $subchk = $mform->createElement('advcheckbox', "grade_item_{$nagi->id}", $nagi->itemname, null, array('name' => "grade_item_{$nagi->id}" ,'group'=> "average_config_grade_item_{$gi->id}" ), array(0, 1));
                     $n[] = $subchk;
                 }
-                $subgroup = $mform->createElement('group', "average_config_grade_item_{$gi->id}" , "Indicar los items de calificación que promedian {$gi->itemname}", $n, array('<br>'), true); 
-                $subgroup->setAttributes(['class' => 'pl-4' ]);
+        
+                // Crear el grupo para los sub-checkboxes, pero lo ocultamos inicialmente
+                $subgroup = $mform->createElement('group', "average_config_grade_item_{$gi->id}", "Indicar los items de calificación que promedian {$gi->itemname}", $n, array('<br>'), true);
+                $subgroup->setAttributes(['class' => 'pl-4 hiddenClassName',]); // Ocultamos el grupo inicialmente
                 $notas[] = $subgroup;
+        
+            
             } else {
-                //Items de calificacion configurados en el curso
-                $notas[] = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>'notas'), array(0, 1)); 
+                // Items de calificación configurados en el curso
+                $notas[] = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}", 'group'=>'notas'), array(0, 1)); 
             }
         }
-
+        
         if(sizeof($grades_items) == 0){
             $mensaje_grade_items_no_configuradas = get_string('items_de_calificacion_no_configurados', 'mod_exportanotas');
             $mform->addElement('html', "<div class='p-5'><h6 class='text-center alert alert-primary'>{$mensaje_grade_items_no_configuradas}</h6></div>");
         }
-
+        
         $mform->addGroup($notas, 'seleccion_de_notas', '', array('<br>'), true);
-
         $mform->addElement('header', 'others', get_string('others', 'mod_exportanotas'));
+        
+        // Agregar JavaScript para manejar la visibilidad de los ítems
+        $mform->addElement('html', '<script>
+    document.addEventListener("DOMContentLoaded", function() {
+    var element = document.getElementsByClassName("checkboxPrincipalNFC")[1]; 
+   
+        var subGroup = document.getElementsByClassName("hiddenClassName")[0];
+      
+         function toggleVisibility(){
+            if (element.checked) {
+         
+    
+                subGroup.classList.remove("hidden");    
+            } else {
+                subGroup.classList.add("hidden"); // Oculta el elemento si la checkbox no está seleccionada
+            }
+        }
+        toggleVisibility();
+        element.addEventListener("change", toggleVisibility);
+    });
+</script>');
+        
+        // $mform->addElement('html', '
+        //     <script type="text/javascript">
+                
+        //         function toggleVisibility(elementId) {
+        //             console.log("Esto entra", elementId)
+        //             var element = document.getElementsByClassName(elementId)[0]
+        //             if (element.classList.contains("hidden")) {
+        //                 element.classList.remove("hidden");
+                        
+        //             } else {
+        //                  element.classList.add("hidden");
+                        
+        //             }
+                    
+        //         }
+            
+        //     </script>
+        // ');
 
         // Add standard grading elements.
         $this->standard_grading_coursemodule_elements();
