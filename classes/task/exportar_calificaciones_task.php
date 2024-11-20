@@ -94,7 +94,10 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
 
             // Añadir los campos personalizados al SELECT
             foreach ($custom_fields as $field) {
+                if ($field->shortname === 'class') {
                 $sql .= "(SELECT data FROM {user_info_data} WHERE userid = u.id AND fieldid = {$field->id}) AS {$field->shortname}, ";
+                break;
+                }
             }
 
             // Remover la última coma y espacio
@@ -313,7 +316,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                     
                     if ($grade) {
                         if (in_array($grade->aggregationstatus, ['unknown', 'dropped', 'novalue']) || $grade->finalgrade === null) {
-                            $grade_value = 'Ausente';
+                            $grade_value = '';
                         } elseif ($grade->finalgrade == 0) {
                             $grade_value = '-';
                         } elseif ($grade->finalgrade > 0) {
@@ -332,7 +335,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                             $grade_value = '-';
                         }
                     } else {
-                        $grade_value = 'Ausente';
+                        $grade_value = '';
                     }
                     $row[] = $grade_value;
                 }
