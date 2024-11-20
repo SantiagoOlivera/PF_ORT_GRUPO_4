@@ -240,7 +240,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                 }
         
                 // Crear el grupo para los sub-checkboxes, pero lo ocultamos inicialmente
-                $subgroup = $mform->createElement('group', "average_config_grade_item_{$gi->id}", "Indicar los items de calificación que promedian {$gi->itemname}", $n, array('<br>'), true);
+                $subgroup = $mform->createElement('group', "average_config_grade_item_{$gi->id}", null, $n, array('<br>'), true);
                 $subgroup->setAttributes(['class' => 'pl-4 hiddenClassName',]); // Ocultamos el grupo inicialmente
                 $notas[] = $subgroup;
         
