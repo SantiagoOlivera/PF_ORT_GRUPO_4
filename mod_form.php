@@ -219,7 +219,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
 
         $not_averageable_grade_items = [];
         foreach($grades_items as $gi) {
-            if(!$gi->is_averageable){
+            if(!$gi->is_averageable && !$gi->is_fixed){
                 array_push($not_averageable_grade_items, $gi);
             }
         }
