@@ -257,9 +257,9 @@ class mod_exportanotas_mod_form extends moodleform_mod {
             
             } else if($gi->is_fixed) {
 
-                $chk = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>"notas", 'class' => "checkboxFixedGradeItem"), array(0, 1));
-                $select = $mform->createElement('select', "config_grade_item_{$gi->id}" , null, $arrayGradeItemsOptionsSelect );
-                
+                $chk = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>"notas", 'class' => "checkboxFixedGradeItem", 'gradeitem' => "{$gi->id}"), array(0, 1));
+                $select = $mform->createElement('select', "config_grade_item_{$gi->id}" , null, $arrayGradeItemsOptionsSelect, array( 'class'=> 'pl-4', 'gradeitem' => "{$gi->id}") );
+
                 $notas[] = $chk;
                 $notas[] = $select;
 
@@ -295,6 +295,24 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         }
         toggleVisibility();
         element.addEventListener("change", toggleVisibility);
+
+
+        var fixedcheckboxes = document.querySelectorAll(`input[type="checkbox"].checkboxFixedGradeItem`);
+        var functionToggle = function(e) {
+            var checkbox = e;
+            var gi = checkbox.getAttribute("gradeitem");
+            var el = document.querySelector(`select[gradeitem="${gi}"]`);
+            if(checkbox.checked){
+                el.classList.remove("hidden");
+            } else {
+                el.classList.add("hidden");
+            }
+        };
+        fixedcheckboxes.forEach(e => {
+            e.addEventListener( "change" , function(event) { functionToggle(event.currentTarget); });
+            functionToggle(e);
+        });
+
     });
 </script>');
         
@@ -688,7 +706,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         $grades_items = $DB->get_records_sql($sql_grades_items, ['courseid' => $course_id]);
 
         //Agrego items de calificacion por defecto si no existen en la configuracion del cur
-        foreach($default_grade_items as $dgi) {
+        /* foreach($default_grade_items as $dgi) {
             $ret = array_filter($grades_items, function($gi) use ($dgi) {
                 return $dgi->itemname == $gi->itemname;
             });
@@ -697,7 +715,10 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                 array_push($grades_items, $dgi);    
             }
         }
-
+        */
+        foreach($default_grade_items as $dgi) {
+            array_push($grades_items, $dgi); 
+        }
         return $grades_items;
     }
 
