@@ -677,10 +677,7 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                                 gi.id AS id, 
                                 gi.itemname AS itemname,
                                 true AS is_set,
-                                ( SELECT CASE gi.itemmodule 
-                                    WHEN 'exportanotas' THEN true
-                                    ELSE false
-                                END ) AS is_fixed 
+                                false AS is_fixed 
                             FROM 
                                 {grade_items} AS gi 
                             WHERE 
