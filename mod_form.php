@@ -214,7 +214,9 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         // Añadir el encabezado "Selección de notas"
         $mform->addElement('header', 'seleccionnotas', get_string('seleccionnotas', 'mod_exportanotas'));
 
+        //Obtener los items de calificacion
         $grades_items = $this->get_grade_items_course($course_id);
+
         $not_averageable_grade_items = [];
         foreach($grades_items as $gi) {
             if(!$gi->is_averageable){
@@ -223,6 +225,14 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         }
 
         $notas = array();
+
+        $arrayGradeItemsOptionsSelect = array();
+        $arrayGradeItemsOptionsSelect[''] = 'No seleccionada';
+        foreach($grades_items as $gi){
+            if(!$gi->is_fixed) {
+                $arrayGradeItemsOptionsSelect[$gi->id] = $gi->itemname;
+            }
+        } 
 
         foreach($grades_items as $gi) {
             if($gi->is_averageable) {
@@ -245,6 +255,14 @@ class mod_exportanotas_mod_form extends moodleform_mod {
                 $notas[] = $subgroup;
         
             
+            } else if($gi->is_fixed) {
+
+                $chk = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}" ,'group'=>"notas", 'class' => "checkboxFixedGradeItem"), array(0, 1));
+                $select = $mform->createElement('select', "config_grade_item_{$gi->id}" , null, $arrayGradeItemsOptionsSelect );
+                
+                $notas[] = $chk;
+                $notas[] = $select;
+
             } else {
                 // Items de calificación configurados en el curso
                 $notas[] = $mform->createElement('advcheckbox', "grade_item_{$gi->id}", $gi->itemname, null, array('name' => "grade_item_{$gi->id}", 'group'=>'notas'), array(0, 1)); 
@@ -501,7 +519,8 @@ class mod_exportanotas_mod_form extends moodleform_mod {
         }
 
         //Guardamos los items de calificacion defualt o fijos si no estan configurados en el curso
-        $seleccion_de_notas = $this->save_unset_grade_items($data->seleccion_de_notas);
+        //$seleccion_de_notas = $this->save_unset_grade_items($data->seleccion_de_notas);
+        $seleccion_de_notas = $data->seleccion_de_notas;
 
         // Si el curso ya existe, actualizarlo, si no, añadirlo
         if ($course_index !== null) {
