@@ -30,7 +30,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
             if ($debug) {
                 mtrace($message);
             }
-            //echo "{$message} \n ";
+            echo "{$message} \n ";
         };
 
         $imprimir_inicio = function () use ($trace) {
@@ -301,17 +301,34 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
                         $grade = $DB->get_record_sql($sql_grade, ['itemid' => $activity->gradeitemid, 'userid' => $user_data->userid]);
 
                     } else {
-                        $sql_where_items = exportar_calificaciones_task::get_sql_grade_items_for_avg_fixed_grade_item($course_id, $activity->gradeitemid);
-                        $sql_grade = "SELECT 
-                                        AVG(finalgrade) AS finalgrade, 
-                                        'used' AS aggregationstatus
-                                    FROM 
-                                        {grade_grades}
-                                    WHERE 
-                                        itemid IN {$sql_where_items} AND 
-                                        userid = :userid";
-                                        
-                        $grade = $DB->get_record_sql($sql_grade, ['userid' => $user_data->userid]);
+                        //Para NFC nota final promediable
+                        if($activity->is_averageable){
+                            $sql_where_items = exportar_calificaciones_task::get_sql_grade_items_for_avg_fixed_grade_item($course_id, $activity->gradeitemid);
+                            $sql_grade = "SELECT 
+                                            AVG(finalgrade) AS finalgrade, 
+                                            'used' AS aggregationstatus
+                                        FROM 
+                                            {grade_grades}
+                                        WHERE 
+                                            itemid IN {$sql_where_items} AND 
+                                            userid = :userid";
+                                            
+                            $grade = $DB->get_record_sql($sql_grade, ['userid' => $user_data->userid]);
+                        } else {
+                            //Notas fijas ejempl FJU, ect.
+                            $sql_where_id_item = exportar_calificaciones_task::get_sql_grade_items_for_selectable_fixed_grade_item($course_id, $activity->gradeitemid);
+                            if(!empty($sql_where_id_item)){
+                                $sql_grade = "SELECT 
+                                    finalgrade AS finalgrade, 
+                                    'used' AS aggregationstatus
+                                FROM 
+                                    {grade_grades}
+                                WHERE 
+                                    itemid = {$sql_where_id_item} AND 
+                                    userid = :userid";
+                                $grade = $DB->get_record_sql($sql_grade, ['userid' => $user_data->userid]);
+                            }
+                        }   
                     }
                     
                     if ($grade) {
@@ -1060,6 +1077,37 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
 
         return $sql_where_notas;
 
+    }
+
+
+    public static function get_sql_grade_items_for_selectable_fixed_grade_item( $course_id, $fixed_grade_item_id ) {
+
+        $ret = '';
+
+        $seleccion_de_notas = exportar_calificaciones_task::get_seleccion_de_notas_course($course_id);
+
+        $id_item = null;
+
+        $sql_notas = '';
+
+        //Convertir a un array el objeto
+        $array_seleccion_de_notas = get_object_vars($seleccion_de_notas);
+        if(sizeof($array_seleccion_de_notas) > 0) {
+            foreach( $array_seleccion_de_notas as $k => $val ) {
+                if($k == "config_grade_item_$fixed_grade_item_id") {
+                    $id_item = $val;
+                    break;
+                }
+            }
+        }
+
+        if(isset($id_item)) {
+            if(!empty($id_item)){
+                $ret = $id_item;
+            }
+        }
+
+        return $ret;
     }
 
 
