@@ -80,7 +80,7 @@ class exportar_calificaciones_task extends \core\task\scheduled_task {
             $trace("Obteniendo calificaciones del curso ID: $course_id...");
 
             // Obtener los campos personalizados
-            $custom_fields = $DB->get_records('user_info_field', null, '', 'id, shortname, name');
+            $custom_fields = []; //$DB->get_records('user_info_field', null, '', 'id, shortname, name');
 
             // Obtener datos de los usuarios incluyendo campos personalizados
             $sql = "SELECT DISTINCT
